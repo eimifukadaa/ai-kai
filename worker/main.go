@@ -76,6 +76,7 @@ func main() {
 		log.Printf("Processing job %s for document %s", job.ID, job.DocumentID)
 
 		// 3. Process
+		// dendy-code-process
 		err = proc.ProcessJob(job)
 		
 		status := "completed"
