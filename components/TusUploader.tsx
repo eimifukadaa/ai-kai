@@ -136,15 +136,18 @@ export default function TusUploader({ onUploadComplete }: { onUploadComplete?: (
         e.preventDefault();
         setIsDragOver(false);
 
-        if (e.dataTransfer.files) {
-            Array.from(e.dataTransfer.files).forEach((file) => {
-                if (file.type === "application/pdf") {
-                    startUpload(file);
-                } else {
-                    alert("Only PDF files are supported");
-                }
-            });
-        }
+        Array.from(e.dataTransfer.files).forEach((file) => {
+            const validTypes = [
+                "application/pdf",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "application/msword"
+            ];
+            if (validTypes.includes(file.type) || file.name.endsWith('.docx') || file.name.endsWith('.doc')) {
+                startUpload(file);
+            } else {
+                alert("Only PDF and Word (DOCX) files are supported");
+            }
+        });
     }, []);
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -168,7 +171,7 @@ export default function TusUploader({ onUploadComplete }: { onUploadComplete?: (
                 <input
                     id="file-input"
                     type="file"
-                    accept="application/pdf"
+                    accept=".pdf,.docx,.doc"
                     multiple
                     className="hidden"
                     onChange={handleFileSelect}
@@ -179,7 +182,7 @@ export default function TusUploader({ onUploadComplete }: { onUploadComplete?: (
                     </div>
                     <h3 className="text-xl font-semibold text-gray-900">Upload Documents</h3>
                     <p className="text-gray-900">
-                        Drag & drop PDFs here or click to browse
+                        Drag & drop PDF or Word files here
                     </p>
                     <p className="text-xs text-black font-medium">
                         Max 100MB per file. Resumable uploads enabled.

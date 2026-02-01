@@ -21,6 +21,7 @@ create or replace function search_documents_vector(
 ) returns table (
   id uuid,
   document_id uuid,
+  document_name text,
   page_number int,
   content text,
   similarity float
@@ -30,6 +31,7 @@ begin
   select
     dc.id,
     dc.document_id,
+    d.name as document_name,
     dc.page_number,
     dc.content,
     1 - (dc.embedding <=> query_embedding) as similarity

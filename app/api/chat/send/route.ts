@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { GoogleGenerativeAIStream, Message, StreamingTextResponse, StreamData } from "ai";
+import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase-server";
 
 export async function POST(req: Request) {
@@ -34,42 +35,73 @@ export async function POST(req: Request) {
         const genAI_Embed = new GoogleGenerativeAI(apiKeys[0]);
         const embeddingModel = genAI_Embed.getGenerativeModel({ model: "text-embedding-004" });
 
+        // Create Admin Client for searching (bypasses RLS)
+        const supabaseAdmin = createAdminClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.SUPABASE_SERVICE_ROLE_KEY!
+        );
+
         // 2. Search for relevant chunks using Vector Search
         let chunks = [];
         try {
             const embeddingResult = await embeddingModel.embedContent(query);
             const embedding = embeddingResult.embedding.values;
 
-            const { data, error: searchError } = await supabase
+            const { data, error: searchError } = await supabaseAdmin
                 .rpc('search_documents_vector', {
                     query_embedding: embedding,
-                    match_count: 25,
-                    filter_user_id: session.user.id
+                    match_count: 100, // MEGA FIX: Use 100 chunks
+                    filter_user_id: null
                 });
 
             if (searchError) console.error("Search error:", searchError);
-            if (data) chunks = data;
+            if (data) {
+                chunks = data;
+                console.log(`[DEBUG] Found ${chunks.length} chunks for query: "${query}"`);
+            }
 
         } catch (embedError) {
             console.error("Embedding generation failed:", embedError);
-            // We continue without chunks if embedding fails (fallback to pure LLM)
         }
 
-        // 3. Build Context
+        // 3. Enrich with Document Names
+        const docIds = [...new Set(chunks.map((c: any) => c.document_id))];
+        let docMap: Record<string, string> = {};
+
+        if (docIds.length > 0) {
+            const { data: docs } = await supabaseAdmin.from('documents').select('id, name').in('id', docIds);
+            if (docs) docs.forEach(d => docMap[d.id] = d.name);
+        }
+
+        // 4. Build Context
         const retrievedChunks = chunks || [];
-        const contextText = retrievedChunks.map((c: any) =>
-            `[Page ${c.page_number}] ${c.content}`
-        ).join("\n\n");
+        const contextText = retrievedChunks.map((c: any) => {
+            const name = docMap[c.document_id] || "Dokumen KAI";
+            return `[File: ${name}, Page: ${c.page_number}] ${c.content}`;
+        }).join("\n\n");
 
-        const systemPrompt = `You are an AI assistant for PT.KAI (Indonesian Railways). Answer questions ONLY using the provided document text.
-    If the answer is not found in the documents, respond with: "TIDAK DITEMUKAN DI DOKUMEN YANG DIUPLOAD."
-    Always cite the source by referencing the page number like [Page X].
-    
-    Context:
-    ${contextText}
-    `;
+        const systemPrompt = `You are an expert AI assistant specialized in PT.KAI (Indonesian Railways) regulations. 
+Your mission is to provide extremely detailed, accurate, and professional answers using ONLY the provided document context.
 
-        const prompt = `${systemPrompt}\n\nUser Question: ${query}`;
+INSTRUCTIONS:
+1. Provide a comprehensive explanation in Indonesian.
+2. Synthesize information from multiple pages if necessary to give a complete answer.
+3. If the answer is found, format it clearly and professionally.
+4. ALWAYS add a "Sumber" section at the VERY END.
+5. In the "Sumber" section, list each unique document name and its page(s) on a new line.
+6. If the EXACT answer is not present in the context, respond ONLY with: "Tidak ditemukan di dokumen yang diupload."
+
+EXAMPLE RESPONSE STYLE:
+[Penjelasan mendalam tentang topik tersebut...]
+
+Sumber
+Peraturan Dinas 3.pdf
+p.95, p.102
+
+CONTEXT DATA:
+${contextText}`;
+
+        const prompt = `${systemPrompt}\n\nPertanyaan: ${query}\n\nJawaban:`;
 
         // 4. Stream Response with Fallback AND Key Rotation
         const modelsToTry = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-flash-latest"];
@@ -123,7 +155,11 @@ export async function POST(req: Request) {
         }
 
         const data = new StreamData();
-        data.append({ citations: retrievedChunks });
+        const enrichedCitations = retrievedChunks.map((c: any) => ({
+            ...c,
+            document_name: docMap[c.document_id] || "Dokumen KAI"
+        }));
+        data.append({ citations: enrichedCitations });
 
         const stream = GoogleGenerativeAIStream(geminiStream, {
             onFinal: async (completion) => {
