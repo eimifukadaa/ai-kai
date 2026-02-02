@@ -352,8 +352,8 @@ func (p *Processor) extractTextWithGemini(pdfPath string, pageNum int) (string, 
         return "", err
     }
 
-    // 3. Call Gemini 1.5 Flash for OCR
-    model := p.genAIClient.GenerativeModel("gemini-1.5-flash-latest")
+    // 3. Call Gemini 2.5 Flash for OCR (Updated to verified working model)
+    model := p.genAIClient.GenerativeModel("gemini-2.5-flash")
     
     // Set a prompt optimized for Indonesian document OCR
     prompt := "Ini adalah halaman dari dokumen peraturan PT KAI. Tolong ekstrak semua teks dari halaman ini secara akurat. Pertahankan struktur teks jika memungkinkan. Jangan tambahkan komentar apapun, hanya teks dari dokumen."

@@ -22,6 +22,8 @@ export default function DocumentsPage() {
     const [deleteModalOpen, setDeleteModalOpen] = useState(false);
     const [docToDelete, setDocToDelete] = useState<Document | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [userEmail, setUserEmail] = useState<string | null>(null);
+    const [isMenuOpen, setIsMenuOpen] = useState(false);
 
     const router = useRouter();
 
@@ -32,6 +34,8 @@ export default function DocumentsPage() {
             return;
         }
 
+        setUserEmail(session.user.email || "User");
+
         const { data, error } = await supabase
             .from("documents")
             .select("*")
@@ -41,6 +45,11 @@ export default function DocumentsPage() {
             setDocuments(data);
         }
         setLoading(false);
+    };
+
+    const handleLogout = async () => {
+        await supabase.auth.signOut();
+        router.push("/login"); // Explicit redirect to login after sign out
     };
 
     useEffect(() => {
@@ -87,14 +96,49 @@ export default function DocumentsPage() {
     return (
         <div className="min-h-screen bg-gray-50 p-4 md:p-8 relative">
             <div className="max-w-5xl mx-auto space-y-8">
-                <header className="flex justify-between items-center">
-                    <h1 className="text-2xl font-bold text-gray-900">My Documents</h1>
-                    <button
-                        onClick={() => router.push("/chat")}
-                        className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
-                    >
-                        Go to Chat
-                    </button>
+                <header className="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                    <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                        <span>📄</span> Kai Docs AI
+                    </h1>
+
+                    <div className="flex items-center gap-4">
+                        <button
+                            onClick={() => router.push("/chat")}
+                            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-medium shadow-md hover:shadow-lg flex items-center gap-2"
+                        >
+                            <span>💬</span> Go to Chat
+                        </button>
+
+                        <div className="relative">
+                            <button
+                                onClick={() => setIsMenuOpen(!isMenuOpen)}
+                                className="flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-full transition border border-gray-200"
+                            >
+                                <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-700 font-bold border border-indigo-200">
+                                    {userEmail ? userEmail[0].toUpperCase() : "U"}
+                                </div>
+                                <span className="text-sm font-medium text-gray-700 hidden md:block">
+                                    {userEmail}
+                                </span>
+                            </button>
+
+                            {isMenuOpen && (
+                                <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden z-20 animate-in fade-in zoom-in-95 duration-100">
+                                    <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
+                                        <p className="text-sm text-gray-500">Signed in as</p>
+                                        <p className="text-sm font-semibold text-gray-900 truncate" title={userEmail || ""}>{userEmail}</p>
+                                    </div>
+                                    <button
+                                        onClick={handleLogout}
+                                        className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50 transition flex items-center gap-2"
+                                    >
+                                        <div className="w-5 h-5 flex items-center justify-center">🚪</div>
+                                        Log Out
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
                 </header>
 
                 <section className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
@@ -105,42 +149,51 @@ export default function DocumentsPage() {
                 <section>
                     <h2 className="text-lg font-semibold mb-4 text-gray-900">Uploaded Files</h2>
                     {loading ? (
-                        <div className="text-center py-10 text-gray-900">Loading...</div>
+                        <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+                            <Loader2 className="w-8 h-8 animate-spin mb-2" />
+                            <p>Loading documents...</p>
+                        </div>
                     ) : documents.length === 0 ? (
-                        <div className="text-center py-10 text-gray-900 bg-white rounded-xl border border-dashed border-gray-300">No documents found. Upload one to get started.</div>
+                        <div className="text-center py-12 text-gray-500 bg-white rounded-2xl border border-dashed border-gray-200">
+                            <div className="mx-auto w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-3">
+                                <FileText className="w-6 h-6 text-gray-300" />
+                            </div>
+                            <p>No documents found.</p>
+                            <p className="text-sm mt-1">Upload a PDF to get started.</p>
+                        </div>
                     ) : (
                         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                             {documents.map((doc) => (
-                                <div key={doc.id} className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition relative group">
+                                <div key={doc.id} className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm hover:shadow-lg transition-all duration-300 relative group">
                                     <div className="flex items-start justify-between mb-3">
-                                        <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600">
+                                        <div className="p-2 bg-indigo-50 rounded-xl text-indigo-600">
                                             <FileText className="w-6 h-6" />
                                         </div>
                                         <div className="flex items-center gap-2">
                                             <StatusBadge status={doc.status} />
                                             <button
                                                 onClick={() => handleDeleteClick(doc)}
-                                                className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
                                                 title="Delete Document"
                                             >
                                                 <Trash2 className="w-4 h-4" />
                                             </button>
                                         </div>
                                     </div>
-                                    <h3 className="font-medium text-gray-900 truncate mb-1" title={doc.name}>
+                                    <h3 className="font-semibold text-gray-900 truncate mb-1" title={doc.name}>
                                         {doc.name}
                                     </h3>
-                                    <div className="text-sm text-gray-900 flex items-center justify-between">
-                                        <span>{new Date(doc.created_at).toLocaleDateString()}</span>
+                                    <div className="text-sm text-gray-900 flex flex-col gap-2">
+                                        <span className="text-gray-400 text-xs">{new Date(doc.created_at).toLocaleDateString()}</span>
                                         {doc.status === 'processing' && doc.pages_total > 0 && (
-                                            <div className="w-full mt-3">
+                                            <div className="w-full mt-1">
                                                 <div className="flex justify-between text-xs mb-1 text-indigo-700 font-medium">
                                                     <span>Processing OCR...</span>
                                                     <span>{Math.round((doc.pages_done / doc.pages_total) * 100)}%</span>
                                                 </div>
                                                 <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden border border-gray-200">
                                                     <div
-                                                        className="bg-indigo-600 h-full rounded-full transition-all duration-500 ease-out"
+                                                        className="bg-indigo-600 h-full rounded-full transition-all duration-500 ease-out shadow-[0_0_10px_rgba(79,70,229,0.5)] animate-pulse"
                                                         style={{ width: `${(doc.pages_done / doc.pages_total) * 100}%` }}
                                                     ></div>
                                                 </div>
@@ -160,14 +213,14 @@ export default function DocumentsPage() {
             {/* DELETE MODAL */}
             {deleteModalOpen && docToDelete && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 transform transition-all scale-100">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 transform transition-all scale-100">
                         <div className="flex justify-between items-start mb-4">
                             <div className="p-3 bg-red-100 rounded-full">
                                 <AlertTriangle className="w-6 h-6 text-red-600" />
                             </div>
                             <button
                                 onClick={() => setDeleteModalOpen(false)}
-                                className="text-gray-400 hover:text-gray-600"
+                                className="text-gray-400 hover:text-gray-600 transition"
                             >
                                 <X className="w-5 h-5" />
                             </button>
@@ -175,7 +228,7 @@ export default function DocumentsPage() {
 
                         <h3 className="text-xl font-bold text-gray-900 mb-2">Delete Document?</h3>
                         <p className="text-gray-600 mb-6">
-                            Are you sure you want to delete <span className="font-bold text-gray-800">"{docToDelete.name}"</span>?
+                            Are you sure you want to delete <span className="font-bold text-gray-900">"{docToDelete.name}"</span>?
                             This action cannot be undone.
                         </p>
 
@@ -190,7 +243,7 @@ export default function DocumentsPage() {
                             <button
                                 onClick={confirmDelete}
                                 disabled={isDeleting}
-                                className="px-4 py-2 bg-red-600 text-white hover:bg-red-700 rounded-lg font-medium transition-colors flex items-center gap-2"
+                                className="px-4 py-2 bg-red-600 text-white hover:bg-red-700 rounded-lg font-medium transition-colors flex items-center gap-2 shadow-sm"
                             >
                                 {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                                 Delete Forever

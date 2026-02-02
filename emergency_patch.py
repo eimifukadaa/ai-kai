@@ -1,4 +1,15 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import paramiko
+import sys
+import os
+
+# CONFIGURATION
+REMOTE_FILE_PATH = "/root/kai-chat/app/api/chat/send/route.ts"
+HOST = "146.190.90.47"
+USERNAME = "root"
+PASSWORD = "Fujimori6Riho"
+
+# The CORRECT Content for route.ts (Hardcoded to be safe)
+ROUTE_CONTENT = r"""import { GoogleGenerativeAI } from "@google/generative-ai";
 import { GoogleGenerativeAIStream, Message, StreamingTextResponse, StreamData } from "ai";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase-server";
@@ -29,19 +40,17 @@ export async function POST(req: Request) {
         const lastMessage = messages[messages.length - 1];
         const query = lastMessage.content;
 
-        // 1. Setup Gemini with first key for embeddings (embeddings usually have higher rate limits)
-        // We use the first key for embeddings to keep it simple, or we could rotate too.
-        // For now, let's just use the first one, if it fails we might need to handle it too, but generation is the main bottleneck.
+        // 1. Setup Gemini with first key for embeddings
         const genAI_Embed = new GoogleGenerativeAI(apiKeys[0]);
         const embeddingModel = genAI_Embed.getGenerativeModel({ model: "text-embedding-004" });
 
-        // Create Admin Client for searching (bypasses RLS)
+        // Create Admin Client for searching
         const supabaseAdmin = createAdminClient(
             process.env.NEXT_PUBLIC_SUPABASE_URL!,
             process.env.SUPABASE_SERVICE_ROLE_KEY!
         );
 
-        // 2. Search for relevant chunks using Vector Search
+        // 2. Search for relevant chunks
         let chunks = [];
         try {
             const embeddingResult = await embeddingModel.embedContent(query);
@@ -50,14 +59,13 @@ export async function POST(req: Request) {
             const { data, error: searchError } = await supabaseAdmin
                 .rpc('search_documents_vector', {
                     query_embedding: embedding,
-                    match_count: 100, // MEGA FIX: Use 100 chunks
+                    match_count: 100,
                     filter_user_id: null
                 });
 
             if (searchError) console.error("Search error:", searchError);
             if (data) {
                 chunks = data;
-                console.log(`[DEBUG] Found ${chunks.length} chunks for query: "${query}"`);
             }
 
         } catch (embedError) {
@@ -105,7 +113,7 @@ ${contextText}`;
         const prompt = `${systemPrompt}\n\nPertanyaan: ${query}\n\nJawaban:`;
 
         // 4. Stream Response with Fallback AND Key Rotation
-        // Use verified working model 2.5
+        // STRICTLY USING VERIFIED 2.5 FLASH
         const modelsToTry = ["gemini-2.5-flash", "gemini-flash-latest"];
 
         let geminiStream = null;
@@ -116,43 +124,25 @@ ${contextText}`;
             const currentKey = apiKeys[keyIndex];
             const currentGenAI = new GoogleGenerativeAI(currentKey);
 
-            console.log(`Using API Key ${keyIndex + 1}/${apiKeys.length}`);
-
             // Try models with current key
             for (const modelName of modelsToTry) {
                 try {
-                    console.log(`Trying model: ${modelName} with Key ${keyIndex + 1}...`);
                     const model = currentGenAI.getGenerativeModel({ model: modelName });
                     geminiStream = await model.generateContentStream(prompt);
-
-                    // If we get here, it worked! Break inner loop
                     break;
                 } catch (e: any) {
                     console.error(`Model ${modelName} failed with Key ${keyIndex + 1}:`, e.message);
                     lastError = e;
-
-                    // Check if it is a quota/rate limit error
                     const isQuotaError = e.message?.includes('429') || e.status === 429 || e.toString().includes('Quota');
-
                     if (isQuotaError) {
-                        // If it's a quota error, we should try the next KEY, not just the next model (usually).
-                        // So we break the model loop to go to the next key.
-                        console.warn("Quota exceeded on current key, switching...");
                         break;
                     }
-
-                    // If it's NOT a quota error (e.g. model not found), we try the next MODEL on the same key.
-                    // Unless it's the last model, then loop continues naturally.
                 }
             }
-
-            // If we have a stream, we are good! Break user loop.
             if (geminiStream) break;
         }
 
         if (!geminiStream) {
-            // If we exhausted all keys and models
-            console.error("All keys and models exhausted.");
             throw lastError || new Error("Failed to generate response with all available keys.");
         }
 
@@ -172,13 +162,73 @@ ${contextText}`;
         return new StreamingTextResponse(stream, {}, data);
 
     } catch (err: any) {
-        console.error("Chat API Error:", err);
-
-        // Handle Google Generative AI 429 errors
         if (err.message?.includes('429') || err.status === 429 || err.toString().includes('Quota exceeded')) {
             return new Response("AI Usage Limit Reached on ALL keys. Please add more keys or try again later.", { status: 429 });
         }
-
         return new Response(err.message || "Internal Server Error", { status: 500 });
     }
 }
+"""
+
+def create_ssh_client():
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    try:
+        client.connect(HOST, username=USERNAME, password=PASSWORD)
+        return client
+    except Exception as e:
+        print(f"[-] Connection failed: {e}")
+        sys.exit(1)
+
+def run_command(client, command):
+    print(f"[*] Executing: {command}")
+    stdin, stdout, stderr = client.exec_command(command)
+    exit_status = stdout.channel.recv_exit_status()
+    out = stdout.read().decode().strip()
+    err = stderr.read().decode().strip()
+    if out: print(out)
+    if err: print(f"Error: {err}")
+    return exit_status
+
+def main():
+    print("--- 🚨 STARTING EMERGENCY PATCH 🚨 ---")
+    client = create_ssh_client()
+    
+    # 1. READ REMOTE FILE (Before)
+    print("\n[1] Checking current remote file content...")
+    stdin, stdout, stderr = client.exec_command(f"cat {REMOTE_FILE_PATH}")
+    current_content = stdout.read().decode()
+    
+    if 'gemini-1.5-pro' in current_content:
+        print("❌ CRITICAL: Remote file STILL contains 'gemini-1.5-pro'!")
+    else:
+        print("✅ Remote file seems correct (no 'gemini-1.5-pro').")
+
+    # 2. OVERWRITE FILE
+    print("\n[2] Overwriting remote file with CORRECT content...")
+    sftp = client.open_sftp()
+    with sftp.file(REMOTE_FILE_PATH, 'w') as f:
+        f.write(ROUTE_CONTENT)
+    sftp.close()
+    print("✅ File overwritten.")
+
+    # 3. VERIFY AGAIN
+    print("\n[3] Verifying new file content...")
+    stdin, stdout, stderr = client.exec_command(f"cat {REMOTE_FILE_PATH}")
+    new_content = stdout.read().decode()
+    if 'gemini-2.5-flash' in new_content:
+        print("✅ VERIFIED: File patched successfully.")
+    else:
+        print("❌ ERROR: Patch failed verification!")
+        sys.exit(1)
+
+    # 4. REBUILD & RESTART
+    print("\n[4] Rebuilding and Restarting...")
+    run_command(client, "cd /root/kai-chat && npm run build")
+    run_command(client, "pm2 restart kai-chat")
+    
+    print("\n--- 🏁 EMERGENCY PATCH COMPLETE 🏁 ---")
+    client.close()
+
+if __name__ == "__main__":
+    main()
