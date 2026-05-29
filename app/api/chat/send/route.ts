@@ -79,13 +79,14 @@ ATURAN UTAMA:
 1. Kamu adalah otak utama percakapan. Pahami maksud user dari konteks chat dan pertanyaan terbaru.
 2. Gunakan konteks dokumen yang diberikan sebagai sumber fakta utama bila relevan.
 3. Jika ada beberapa potongan dokumen yang relevan, gabungkan menjadi jawaban yang utuh, bukan potongan-potongan.
-4. Jangan mengarang isi dokumen. Jika informasi tidak cukup, katakan dengan jujur bagian mana yang belum tersedia.
-5. Jika konteks dokumen kosong atau tidak relevan, kamu tetap boleh membantu secara umum HANYA jika user meminta penjelasan umum. Namun jika user jelas meminta isi dokumen, jawab: "Maaf, informasi tidak ditemukan di dokumen yang diupload."
-6. Jika jawaban menggunakan dokumen, wajib akhiri dengan bagian "Sumber".
-7. Pada bagian "Sumber", tampilkan nama dokumen dan halaman yang dipakai.
+4. Jika konteks dokumen kuat dan jelas, prioritaskan jawaban berbasis dokumen.
+5. Jika konteks dokumen kosong, lemah, atau tidak relevan, tetap jawab pertanyaan user secara langsung dan natural berdasarkan pengetahuan umum yang andal. JANGAN membuka jawaban dengan kalimat seperti "Maaf, informasi tidak ditemukan di dokumen yang diupload" atau "Namun, secara umum".
+6. Jika harus menjawab secara umum, langsung beri definisi atau penjelasan inti tanpa disclaimer yang berulang.
+7. Jangan mengarang kutipan dokumen. Bagian "Sumber" hanya boleh ditampilkan jika jawaban benar-benar memakai konteks dokumen yang relevan.
 8. Jangan menyebut proses internal seperti vector search, embedding, prompt, system instruction, atau tool.
 9. Jika user meminta ringkasan, buat ringkas. Jika meminta detail, buat rinci dan terstruktur.
-10. Prioritaskan jawaban yang benar, bukan sekadar terdengar meyakinkan.
+10. Prioritaskan jawaban yang benar, lugas, dan berguna, bukan sekadar terdengar meyakinkan.
+11. Untuk pertanyaan definisi singkat seperti "X adalah?", jawab langsung dengan pola: "X adalah ...".
 
 DAFTAR SUMBER TERAMBIL:
 ${sourcesText}
@@ -115,6 +116,30 @@ function buildConversationMessages(messages: unknown[]): ChatMessage[] {
     })
     .filter((message): message is ChatMessage => message !== null)
     .slice(-12);
+}
+
+function hasUsableDocumentContext(chunks: RetrievedChunk[]) {
+  return chunks.length >= 2;
+}
+
+function postProcessAnswer(answer: string, useDocumentContext: boolean) {
+  let cleaned = answer.trim();
+
+  cleaned = cleaned.replace(
+    /^Maaf, informasi tidak ditemukan di dokumen yang diupload\.\s*/i,
+    "",
+  );
+  cleaned = cleaned.replace(/^Namun, secara umum,\s*/i, "");
+  cleaned = cleaned.replace(/^Secara umum,\s*/i, "");
+
+  if (!useDocumentContext) {
+    cleaned = cleaned.replace(/\n+Sumber[\s\S]*$/i, "").trim();
+  }
+
+  return (
+    cleaned ||
+    "Maaf, saya belum bisa memberikan jawaban yang tepat untuk pertanyaan itu."
+  );
 }
 
 function createDataProtocolStream(answer: string) {
@@ -255,7 +280,10 @@ export async function POST(req: Request) {
       })
       .join("\n\n");
 
-    const sourcesText = buildSources(retrievedChunks, docMap);
+    const useDocumentContext = hasUsableDocumentContext(retrievedChunks);
+    const sourcesText = useDocumentContext
+      ? buildSources(retrievedChunks, docMap)
+      : "Tidak ada sumber dokumen yang cukup relevan untuk dipakai pada jawaban ini.";
     const systemPrompt = buildSystemPrompt(contextText, sourcesText);
 
     const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
@@ -295,9 +323,10 @@ export async function POST(req: Request) {
       throw lastError || new Error("Failed to generate response with Groq.");
     }
 
-    const answer =
+    const rawAnswer =
       completion.choices?.[0]?.message?.content?.trim() ||
       "Maaf, terjadi kesalahan saat menghasilkan jawaban.";
+    const answer = postProcessAnswer(rawAnswer, useDocumentContext);
 
     const data = new StreamData();
     const enrichedCitations = retrievedChunks.map((c) => ({
@@ -306,7 +335,7 @@ export async function POST(req: Request) {
     }));
 
     data.append({
-      citations: enrichedCitations,
+      citations: useDocumentContext ? enrichedCitations : [],
       model: usedModel,
     });
     data.close();
