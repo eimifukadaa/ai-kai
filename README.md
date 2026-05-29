@@ -5,7 +5,8 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 This project now uses:
 
 - `Groq` for chat generation in `app/api/chat/send/route.ts`
-- `Gemini` for document embeddings/OCR used by the upload + retrieval pipeline
+- `Gemini` for document embeddings used by the upload + retrieval pipeline
+- Node.js server-side document processing in `lib/document-processor.ts` for Vercel-friendly deployment
 
 Recommended Groq model setup:
 
@@ -13,6 +14,10 @@ Recommended Groq model setup:
 - `llama-3.1-8b-instant` as a fast fallback
 
 Create `.env.local` with the variables from `.env.example` before running the app.
+
+## Deployment note
+
+The document processing flow has been moved into the Next.js app so it can run without the old Go worker. This is more Vercel-friendly, though very large PDFs may still be constrained by serverless execution time limits.
 
 ## Getting Started
 
