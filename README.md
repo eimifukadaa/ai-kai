@@ -1,5 +1,19 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## AI configuration
+
+This project now uses:
+
+- `Groq` for chat generation in `app/api/chat/send/route.ts`
+- `Gemini` for document embeddings/OCR used by the upload + retrieval pipeline
+
+Recommended Groq model setup:
+
+- `llama-3.3-70b-versatile` for the best answer quality
+- `llama-3.1-8b-instant` as a fast fallback
+
+Create `.env.local` with the variables from `.env.example` before running the app.
+
 ## Getting Started
 
 First, run the development server:

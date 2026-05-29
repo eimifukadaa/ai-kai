@@ -13,6 +13,7 @@
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.93.3",
     "ai": "^3.4.33",
+    "groq-sdk": "^0.30.0",
     "clsx": "^2.1.1",
     "lucide-react": "^0.563.0",
     "next": "16.1.6",
