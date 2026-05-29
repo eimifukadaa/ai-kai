@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
@@ -50,10 +51,20 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
       <div className="bg-white w-full max-w-md p-8 rounded-2xl shadow-xl border border-gray-100">
         <div className="text-center mb-8">
+          <div className="flex justify-center mb-4">
+            <Image
+              src="https://www.fastpay.co.id/blog/wp-content/uploads/2020/10/logo-kai-baru.png"
+              alt="KAI Logo"
+              width={120}
+              height={40}
+              className="h-10 w-auto object-contain"
+              priority
+            />
+          </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
             Welcome Back
           </h1>
-          <p className="text-gray-700">Sign in to Kai Docs AI</p>
+          <p className="text-gray-700">Sign in to KAI-AI</p>
         </div>
 
         {error && (
